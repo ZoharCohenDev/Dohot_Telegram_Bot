@@ -49,9 +49,16 @@ npm install
 4. Optionally send `/setcommands` to BotFather and paste:
 	   ```
 	   start - ברוך הבא
+	   commands - תפריט פקודות
 	   createuser - יצירת משתמש חדש
+	   finduser - חיפוש משתמש
+	   extend - הארכת מנוי
+	   disableuser - השבתת משתמש
+	   activateuser - הפעלת משתמש
 	   status - סטטוס מערכת
 	   expiring - מנויים שפגים בקרוב
+	   today - משתמשים שנוצרו היום
+	   analytics - ניתוח משתמשים
 	   myid - הצגת ה-Telegram ID שלך
 	   cancel - ביטול פעולה נוכחית
 	   ```
@@ -161,7 +168,7 @@ Use `/cancel` at any point to abort.
 ## Security notes
 
 - `/start` and `/myid` are public so new admins can retrieve their Telegram ID.
-- Only Telegram users whose numeric ID is listed in `ADMIN_TELEGRAM_IDS` can create users, continue an active create-user flow, or run admin status/expiration commands.
+- Only Telegram users whose numeric ID is listed in `ADMIN_TELEGRAM_IDS` can create users, continue an active create-user flow, or run admin management/status commands.
 - Passwords and tokens are never logged.
 - The bot holds a Supabase JWT in memory; it refreshes automatically before expiry and re-logs in on failure.
 - The bot never reads from or writes to Supabase directly.

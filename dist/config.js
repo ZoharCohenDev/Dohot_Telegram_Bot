@@ -9,7 +9,7 @@ dotenv_1.default.config();
 function required(name) {
     const value = process.env[name];
     if (!value)
-        throw new Error(`Missing required env variable: ${name}`);
+        throw new Error(`Missing required env variable: ${name}. Create .env from .env.example and fill it in.`);
     return value;
 }
 exports.config = {

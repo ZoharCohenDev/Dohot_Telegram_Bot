@@ -57,6 +57,7 @@ export interface CreatedUser {
   phone?: string;
   subscription_expiration_date?: string;
   is_active?: boolean;
+  created_at?: string;
 }
 
 export interface CreateUserResponse {
@@ -85,4 +86,30 @@ export interface UsernameCheckResponse {
   username: string;
   exists: boolean;
   available: boolean;
+}
+
+export type FindUserResponse = Partial<CreatedUser> & {
+  user?: CreatedUser;
+};
+
+export type ExtendUserResponse = Partial<CreatedUser> & {
+  user?: CreatedUser;
+  days?: number;
+  addedDays?: number;
+};
+
+export interface TodayUsersResponse {
+  count: number;
+  users: CreatedUser[];
+}
+
+export interface AdminAnalyticsResponse {
+  byProfession: Record<string, number>;
+  byRole: Record<string, number>;
+  byStatus: {
+    active: number;
+    inactive: number;
+  };
+  newUsersLast7Days: number;
+  newUsersThisMonth: number;
 }

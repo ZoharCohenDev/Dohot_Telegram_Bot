@@ -1,6 +1,5 @@
-import { createBot } from './bot';
-
 async function main(): Promise<void> {
+  const { createBot } = await import('./bot');
   const bot = createBot();
 
   // Graceful shutdown

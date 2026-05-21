@@ -1,5 +1,11 @@
-import { AdminStatusResponse, CreateUserPayload, CreateUserResponse, ExpiringUsersResponse, UsernameCheckResponse } from '../types';
+import { AdminStatusResponse, AdminAnalyticsResponse, CreateUserPayload, CreateUserResponse, CreatedUser, ExtendUserResponse, ExpiringUsersResponse, FindUserResponse, TodayUsersResponse, UsernameCheckResponse } from '../types';
 export declare function createUser(payload: CreateUserPayload): Promise<CreateUserResponse>;
 export declare function getStatus(): Promise<AdminStatusResponse>;
 export declare function getExpiring(days?: number): Promise<ExpiringUsersResponse>;
 export declare function checkUsername(username: string): Promise<UsernameCheckResponse>;
+export declare function findUser(username: string): Promise<FindUserResponse>;
+export declare function extendUser(username: string, days: number): Promise<ExtendUserResponse>;
+export declare function disableUser(username: string): Promise<CreatedUser>;
+export declare function activateUser(username: string): Promise<CreatedUser>;
+export declare function getToday(): Promise<TodayUsersResponse>;
+export declare function getAnalytics(): Promise<AdminAnalyticsResponse>;

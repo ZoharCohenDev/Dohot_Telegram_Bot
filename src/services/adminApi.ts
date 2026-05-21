@@ -2,9 +2,14 @@ import axios from 'axios';
 import { config } from '../config';
 import {
   AdminStatusResponse,
+  AdminAnalyticsResponse,
   CreateUserPayload,
   CreateUserResponse,
+  CreatedUser,
+  ExtendUserResponse,
   ExpiringUsersResponse,
+  FindUserResponse,
+  TodayUsersResponse,
   UsernameCheckResponse,
 } from '../types';
 import { getAccessToken, forceRefresh } from './authService';
@@ -76,6 +81,78 @@ export async function checkUsername(username: string): Promise<UsernameCheckResp
         headers,
         params: { username },
       },
+    );
+    return response.data;
+  });
+}
+
+export async function findUser(username: string): Promise<FindUserResponse> {
+  return withAuthRetry(async () => {
+    const headers = await authHeaders();
+    const response = await axios.get<FindUserResponse>(
+      `${config.dohotApiUrl}/api/admin/users/find`,
+      {
+        headers,
+        params: { username },
+      },
+    );
+    return response.data;
+  });
+}
+
+export async function extendUser(username: string, days: number): Promise<ExtendUserResponse> {
+  return withAuthRetry(async () => {
+    const headers = await authHeaders();
+    const response = await axios.patch<ExtendUserResponse>(
+      `${config.dohotApiUrl}/api/admin/users/${encodeURIComponent(username)}/extend`,
+      { days },
+      { headers },
+    );
+    return response.data;
+  });
+}
+
+export async function disableUser(username: string): Promise<CreatedUser> {
+  return withAuthRetry(async () => {
+    const headers = await authHeaders();
+    const response = await axios.patch<CreatedUser>(
+      `${config.dohotApiUrl}/api/admin/users/${encodeURIComponent(username)}/disable`,
+      undefined,
+      { headers },
+    );
+    return response.data;
+  });
+}
+
+export async function activateUser(username: string): Promise<CreatedUser> {
+  return withAuthRetry(async () => {
+    const headers = await authHeaders();
+    const response = await axios.patch<CreatedUser>(
+      `${config.dohotApiUrl}/api/admin/users/${encodeURIComponent(username)}/activate`,
+      undefined,
+      { headers },
+    );
+    return response.data;
+  });
+}
+
+export async function getToday(): Promise<TodayUsersResponse> {
+  return withAuthRetry(async () => {
+    const headers = await authHeaders();
+    const response = await axios.get<TodayUsersResponse>(
+      `${config.dohotApiUrl}/api/admin/today`,
+      { headers },
+    );
+    return response.data;
+  });
+}
+
+export async function getAnalytics(): Promise<AdminAnalyticsResponse> {
+  return withAuthRetry(async () => {
+    const headers = await authHeaders();
+    const response = await axios.get<AdminAnalyticsResponse>(
+      `${config.dohotApiUrl}/api/admin/analytics`,
+      { headers },
     );
     return response.data;
   });
