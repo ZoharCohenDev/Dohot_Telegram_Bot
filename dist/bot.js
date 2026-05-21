@@ -1,0 +1,175 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createBot = createBot;
+const axios_1 = __importDefault(require("axios"));
+const telegraf_1 = require("telegraf");
+const config_1 = require("./config");
+const adminOnly_1 = require("./middlewares/adminOnly");
+const adminApi_1 = require("./services/adminApi");
+const professionOptions_1 = require("./utils/professionOptions");
+const createUserFlow_1 = require("./flows/createUserFlow");
+const adminOnlyForActiveCreateUserFlow = async (ctx, next) => {
+    const userId = ctx.from?.id;
+    if (!userId || !(0, createUserFlow_1.isInFlow)(userId))
+        return;
+    return (0, adminOnly_1.adminOnly)(ctx, next);
+};
+function parseExpiringDays(text) {
+    const [, rawDays] = text.trim().split(/\s+/);
+    if (!rawDays)
+        return 7;
+    if (!/^\d+$/.test(rawDays))
+        return null;
+    const days = Number(rawDays);
+    if (days < 1 || days > 90)
+        return null;
+    return days;
+}
+function formatDateYYYYMMDD(value) {
+    const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match)
+        return value ?? '—';
+    const [, yyyy, mm, dd] = match;
+    return `${dd}/${mm}/${yyyy}`;
+}
+function formatStatus(status) {
+    return [
+        '📊 סטטוס דוחות',
+        '',
+        `👥 סה״כ משתמשים: ${status.totalUsers}`,
+        `✅ פעילים: ${status.activeUsers}`,
+        `⛔ לא פעילים: ${status.inactiveUsers}`,
+        '',
+        `🛠️ טכנאים: ${status.technicians}`,
+        `👑 מנהלים: ${status.admins}`,
+        '',
+        `💳 מנויים בתוקף: ${status.validSubscriptions}`,
+        `⚠️ מנויים שפגו: ${status.expiredSubscriptions}`,
+        `⏳ פגים בקרוב: ${status.expiringSoon}`,
+        '',
+        `🆕 חדשים החודש: ${status.newUsersThisMonth}`,
+    ].join('\n');
+}
+function formatExpiring(response) {
+    if (response.count === 0 || response.users.length === 0) {
+        return '✅ אין מנויים שפגים בתקופה הזו';
+    }
+    const users = response.users.map((user, index) => [
+        `${index + 1}. ${user.full_name}`,
+        `@${user.username}`,
+        `📞 ${user.phone ?? '—'}`,
+        `🛠️ ${(0, professionOptions_1.getProfessionLabel)(user.profession)}`,
+        `📅 ${formatDateYYYYMMDD(user.subscription_expiration_date)}`,
+    ].join('\n'));
+    return [
+        `⏳ מנויים שפגים ב־${response.days} ימים הקרובים`,
+        '',
+        `סה״כ: ${response.count}`,
+        '',
+        users.join('\n\n'),
+    ].join('\n');
+}
+function resolveAdminApiError(err) {
+    if (!axios_1.default.isAxiosError(err))
+        return 'שגיאה לא צפויה';
+    const status = err.response?.status;
+    const body = err.response?.data;
+    switch (status) {
+        case 403:
+            return 'אין הרשאת מנהל';
+        case 500:
+            return 'שגיאת שרת';
+        default:
+            return body?.message ?? body?.error ?? 'שגיאה לא צפויה';
+    }
+}
+function createBot() {
+    const bot = new telegraf_1.Telegraf(config_1.config.botToken);
+    // ─── Commands ───────────────────────────────────────────────────────────────
+    bot.start((ctx) => ctx.reply([
+        '👋 ברוך הבא לבוט הניהול של Dohot',
+        '',
+        'פקודות זמינות:',
+        '/createuser — יצירת משתמש חדש',
+        '/status — סטטוס מערכת',
+        '/expiring — מנויים שפגים ב־7 ימים הקרובים',
+        '/expiring 30 — מנויים שפגים ב־30 ימים הקרובים',
+        '/myid — הצגת ה-Telegram ID שלך',
+        '/cancel — ביטול פעולה נוכחית',
+    ].join('\n')));
+    bot.command('myid', (ctx) => ctx.reply(`Your Telegram ID is: ${ctx.from.id}`));
+    bot.command('cancel', async (ctx, next) => {
+        if (!(0, createUserFlow_1.isInFlow)(ctx.from.id)) {
+            await ctx.reply('אין פעולה פעילה לביטול.');
+            return;
+        }
+        return (0, adminOnly_1.adminOnly)(ctx, next);
+    }, async (ctx) => {
+        (0, createUserFlow_1.cancelFlow)(ctx.from.id);
+        await ctx.reply('❌ הפעולה בוטלה.');
+    });
+    bot.command('createuser', adminOnly_1.adminOnly, async (ctx) => {
+        // Reset any existing flow and start fresh
+        if ((0, createUserFlow_1.isInFlow)(ctx.from.id)) {
+            (0, createUserFlow_1.cancelFlow)(ctx.from.id);
+        }
+        await (0, createUserFlow_1.startFlow)(ctx);
+    });
+    bot.command('status', adminOnly_1.adminOnly, async (ctx) => {
+        try {
+            const status = await (0, adminApi_1.getStatus)();
+            await ctx.reply(formatStatus(status));
+        }
+        catch (err) {
+            await ctx.reply(`❌ ${resolveAdminApiError(err)}`);
+        }
+    });
+    bot.command('expiring', adminOnly_1.adminOnly, async (ctx) => {
+        const days = parseExpiringDays(ctx.message.text);
+        if (!days) {
+            await ctx.reply('מספר הימים חייב להיות בין 1 ל־90');
+            return;
+        }
+        try {
+            const response = await (0, adminApi_1.getExpiring)(days);
+            await ctx.reply(formatExpiring(response));
+        }
+        catch (err) {
+            await ctx.reply(`❌ ${resolveAdminApiError(err)}`);
+        }
+    });
+    // ─── Text messages (wizard steps) ──────────────────────────────────────────
+    bot.on('text', adminOnlyForActiveCreateUserFlow, async (ctx) => {
+        await (0, createUserFlow_1.handleText)(ctx, ctx.message.text);
+    });
+    // ─── Inline keyboard callbacks ──────────────────────────────────────────────
+    bot.on('callback_query', async (ctx, next) => {
+        // Always acknowledge immediately to dismiss the loading spinner
+        await ctx.answerCbQuery();
+        return next();
+    }, adminOnlyForActiveCreateUserFlow, async (ctx) => {
+        if (!('data' in ctx.callbackQuery))
+            return;
+        const { data } = ctx.callbackQuery;
+        if (!data)
+            return;
+        await (0, createUserFlow_1.handleCallback)(ctx, data);
+    });
+    // ─── Global error handler ───────────────────────────────────────────────────
+    bot.catch(async (err, ctx) => {
+        // Log only the error message, never secrets or tokens
+        const message = err instanceof Error ? err.message : 'unknown error';
+        console.error(`[bot] unhandled error: ${message}`);
+        try {
+            await ctx.reply('אירעה שגיאה. נסה שוב מאוחר יותר.');
+        }
+        catch {
+            // Reply might fail (e.g., bot was blocked)
+        }
+    });
+    return bot;
+}
+//# sourceMappingURL=bot.js.map
