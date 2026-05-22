@@ -28,10 +28,35 @@ import {
   isInFlow,
   cancelFlow,
 } from './flows/createUserFlow';
+import {
+  startExpenseFlow,
+  handleExpenseText,
+  handleExpenseCallback,
+  isInExpenseFlow,
+  cancelExpenseFlow,
+} from './flows/expenseFlow';
+import {
+  startRevenueFlow,
+  handleRevenueText,
+  handleRevenueCallback,
+  isInRevenueFlow,
+  cancelRevenueFlow,
+} from './flows/revenueFlow';
+import { isFinanceSheetsEnabled } from './services/financeSheetsService';
 
-const adminOnlyForActiveCreateUserFlow: MiddlewareFn<Context> = async (ctx, next) => {
+function isInAnyFlow(userId: number): boolean {
+  return isInFlow(userId) || isInExpenseFlow(userId) || isInRevenueFlow(userId);
+}
+
+function cancelAnyFlow(userId: number): void {
+  cancelFlow(userId);
+  cancelExpenseFlow(userId);
+  cancelRevenueFlow(userId);
+}
+
+const adminOnlyForActiveFlow: MiddlewareFn<Context> = async (ctx, next) => {
   const userId = ctx.from?.id;
-  if (!userId || !isInFlow(userId)) return;
+  if (!userId || !isInAnyFlow(userId)) return;
 
   return adminOnly(ctx, next);
 };
@@ -45,6 +70,8 @@ const COMMANDS_MENU = [
   '/extend <username> <days> - הארכת מנוי',
   '/disableuser <username> - השבתת משתמש',
   '/activateuser <username> - הפעלת משתמש',
+  '/expenses - הוספת הוצאה',
+  '/revenue - הוספת הכנסה',
   '',
   '📊 סטטיסטיקות:',
   '/status - סטטוס כללי',
@@ -282,6 +309,8 @@ export function createBot(): Telegraf {
         '/status — סטטוס מערכת',
         '/expiring — מנויים שפגים ב־7 ימים הקרובים',
         '/expiring 30 — מנויים שפגים ב־30 ימים הקרובים',
+        '/expenses — הוספת הוצאה',
+        '/revenue — הוספת הכנסה',
         '/commands — תפריט פקודות',
         '/myid — הצגת ה-Telegram ID שלך',
         '/cancel — ביטול פעולה נוכחית',
@@ -298,7 +327,7 @@ export function createBot(): Telegraf {
   bot.command(
     'cancel',
     async (ctx, next) => {
-      if (!isInFlow(ctx.from.id)) {
+      if (!isInAnyFlow(ctx.from.id)) {
         await ctx.reply('אין פעולה פעילה לביטול.');
         return;
       }
@@ -306,17 +335,39 @@ export function createBot(): Telegraf {
       return adminOnly(ctx, next);
     },
     async (ctx) => {
-      cancelFlow(ctx.from.id);
+      cancelAnyFlow(ctx.from.id);
       await ctx.reply('❌ הפעולה בוטלה.');
     },
   );
 
   bot.command('createuser', adminOnly, async (ctx) => {
     // Reset any existing flow and start fresh
-    if (isInFlow(ctx.from.id)) {
-      cancelFlow(ctx.from.id);
+    if (isInAnyFlow(ctx.from.id)) {
+      cancelAnyFlow(ctx.from.id);
     }
     await startFlow(ctx);
+  });
+
+  bot.command('expenses', adminOnly, async (ctx) => {
+    if (!isFinanceSheetsEnabled()) {
+      await ctx.reply('סנכרון Google Sheets כבוי.');
+      return;
+    }
+    if (isInAnyFlow(ctx.from.id)) {
+      cancelAnyFlow(ctx.from.id);
+    }
+    await startExpenseFlow(ctx);
+  });
+
+  bot.command('revenue', adminOnly, async (ctx) => {
+    if (!isFinanceSheetsEnabled()) {
+      await ctx.reply('סנכרון Google Sheets כבוי.');
+      return;
+    }
+    if (isInAnyFlow(ctx.from.id)) {
+      cancelAnyFlow(ctx.from.id);
+    }
+    await startRevenueFlow(ctx);
   });
 
   bot.command('status', adminOnly, async (ctx) => {
@@ -438,6 +489,15 @@ export function createBot(): Telegraf {
   });
 
   bot.command('today', adminOnly, async (ctx) => {
+    if (isInExpenseFlow(ctx.from.id)) {
+      await handleExpenseText(ctx, ctx.message.text);
+      return;
+    }
+    if (isInRevenueFlow(ctx.from.id)) {
+      await handleRevenueText(ctx, ctx.message.text);
+      return;
+    }
+
     try {
       const response = await getToday();
       await ctx.reply(formatToday(response));
@@ -499,7 +559,15 @@ export function createBot(): Telegraf {
 
   // ─── Text messages (wizard steps) ──────────────────────────────────────────
 
-  bot.on('text', adminOnlyForActiveCreateUserFlow, async (ctx) => {
+  bot.on('text', adminOnlyForActiveFlow, async (ctx) => {
+    if (isInExpenseFlow(ctx.from.id)) {
+      await handleExpenseText(ctx, ctx.message.text);
+      return;
+    }
+    if (isInRevenueFlow(ctx.from.id)) {
+      await handleRevenueText(ctx, ctx.message.text);
+      return;
+    }
     await handleText(ctx, ctx.message.text);
   });
 
@@ -512,12 +580,20 @@ export function createBot(): Telegraf {
       await ctx.answerCbQuery();
       return next();
     },
-    adminOnlyForActiveCreateUserFlow,
+    adminOnlyForActiveFlow,
     async (ctx) => {
       if (!('data' in ctx.callbackQuery)) return;
       const { data } = ctx.callbackQuery;
       if (!data) return;
 
+      if (isInExpenseFlow(ctx.from.id)) {
+        await handleExpenseCallback(ctx, data);
+        return;
+      }
+      if (isInRevenueFlow(ctx.from.id)) {
+        await handleRevenueCallback(ctx, data);
+        return;
+      }
       await handleCallback(ctx, data);
     },
   );

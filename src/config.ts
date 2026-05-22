@@ -18,4 +18,11 @@ export const config = {
     .split(',')
     .map((id) => id.trim())
     .filter(Boolean),
+  enableScheduledNotifications: process.env.ENABLE_SCHEDULED_NOTIFICATIONS === 'true',
+  enableGoogleSheetsSync: process.env.ENABLE_GOOGLE_SHEETS_SYNC === 'true',
+  googleServiceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  googlePrivateKey: process.env.GOOGLE_PRIVATE_KEY,
+  googleSheetsSpreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+  googleSheetsUsersSheetName: process.env.GOOGLE_SHEETS_USERS_SHEET_NAME || 'Users',
+  googleSheetsFinanceSheetName: process.env.GOOGLE_SHEETS_FINANCE_SHEET_NAME,
 } as const;

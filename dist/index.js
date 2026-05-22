@@ -34,10 +34,18 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 async function main() {
     const { createBot } = await Promise.resolve().then(() => __importStar(require('./bot')));
+    const { startScheduledNotifications } = await Promise.resolve().then(() => __importStar(require('./scheduler')));
     const bot = createBot();
+    const scheduledTasks = startScheduledNotifications(bot);
     // Graceful shutdown
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    process.once('SIGINT', () => {
+        scheduledTasks.forEach((task) => task.stop());
+        bot.stop('SIGINT');
+    });
+    process.once('SIGTERM', () => {
+        scheduledTasks.forEach((task) => task.stop());
+        bot.stop('SIGTERM');
+    });
     await bot.launch();
     console.log('[bot] started — long polling active');
 }

@@ -12,10 +12,13 @@
   "dependencies": {
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
+    "googleapis": "^172.0.0",
+    "node-cron": "^4.2.1",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@types/node-cron": "^3.0.11",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"

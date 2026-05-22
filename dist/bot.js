@@ -11,9 +11,20 @@ const adminOnly_1 = require("./middlewares/adminOnly");
 const adminApi_1 = require("./services/adminApi");
 const professionOptions_1 = require("./utils/professionOptions");
 const createUserFlow_1 = require("./flows/createUserFlow");
-const adminOnlyForActiveCreateUserFlow = async (ctx, next) => {
+const expenseFlow_1 = require("./flows/expenseFlow");
+const revenueFlow_1 = require("./flows/revenueFlow");
+const financeSheetsService_1 = require("./services/financeSheetsService");
+function isInAnyFlow(userId) {
+    return (0, createUserFlow_1.isInFlow)(userId) || (0, expenseFlow_1.isInExpenseFlow)(userId) || (0, revenueFlow_1.isInRevenueFlow)(userId);
+}
+function cancelAnyFlow(userId) {
+    (0, createUserFlow_1.cancelFlow)(userId);
+    (0, expenseFlow_1.cancelExpenseFlow)(userId);
+    (0, revenueFlow_1.cancelRevenueFlow)(userId);
+}
+const adminOnlyForActiveFlow = async (ctx, next) => {
     const userId = ctx.from?.id;
-    if (!userId || !(0, createUserFlow_1.isInFlow)(userId))
+    if (!userId || !isInAnyFlow(userId))
         return;
     return (0, adminOnly_1.adminOnly)(ctx, next);
 };
@@ -26,6 +37,8 @@ const COMMANDS_MENU = [
     '/extend <username> <days> - הארכת מנוי',
     '/disableuser <username> - השבתת משתמש',
     '/activateuser <username> - הפעלת משתמש',
+    '/expenses - הוספת הוצאה',
+    '/revenue - הוספת הכנסה',
     '',
     '📊 סטטיסטיקות:',
     '/status - סטטוס כללי',
@@ -238,6 +251,8 @@ function createBot() {
         '/status — סטטוס מערכת',
         '/expiring — מנויים שפגים ב־7 ימים הקרובים',
         '/expiring 30 — מנויים שפגים ב־30 ימים הקרובים',
+        '/expenses — הוספת הוצאה',
+        '/revenue — הוספת הכנסה',
         '/commands — תפריט פקודות',
         '/myid — הצגת ה-Telegram ID שלך',
         '/cancel — ביטול פעולה נוכחית',
@@ -247,21 +262,41 @@ function createBot() {
         await ctx.reply(COMMANDS_MENU);
     });
     bot.command('cancel', async (ctx, next) => {
-        if (!(0, createUserFlow_1.isInFlow)(ctx.from.id)) {
+        if (!isInAnyFlow(ctx.from.id)) {
             await ctx.reply('אין פעולה פעילה לביטול.');
             return;
         }
         return (0, adminOnly_1.adminOnly)(ctx, next);
     }, async (ctx) => {
-        (0, createUserFlow_1.cancelFlow)(ctx.from.id);
+        cancelAnyFlow(ctx.from.id);
         await ctx.reply('❌ הפעולה בוטלה.');
     });
     bot.command('createuser', adminOnly_1.adminOnly, async (ctx) => {
         // Reset any existing flow and start fresh
-        if ((0, createUserFlow_1.isInFlow)(ctx.from.id)) {
-            (0, createUserFlow_1.cancelFlow)(ctx.from.id);
+        if (isInAnyFlow(ctx.from.id)) {
+            cancelAnyFlow(ctx.from.id);
         }
         await (0, createUserFlow_1.startFlow)(ctx);
+    });
+    bot.command('expenses', adminOnly_1.adminOnly, async (ctx) => {
+        if (!(0, financeSheetsService_1.isFinanceSheetsEnabled)()) {
+            await ctx.reply('סנכרון Google Sheets כבוי.');
+            return;
+        }
+        if (isInAnyFlow(ctx.from.id)) {
+            cancelAnyFlow(ctx.from.id);
+        }
+        await (0, expenseFlow_1.startExpenseFlow)(ctx);
+    });
+    bot.command('revenue', adminOnly_1.adminOnly, async (ctx) => {
+        if (!(0, financeSheetsService_1.isFinanceSheetsEnabled)()) {
+            await ctx.reply('סנכרון Google Sheets כבוי.');
+            return;
+        }
+        if (isInAnyFlow(ctx.from.id)) {
+            cancelAnyFlow(ctx.from.id);
+        }
+        await (0, revenueFlow_1.startRevenueFlow)(ctx);
     });
     bot.command('status', adminOnly_1.adminOnly, async (ctx) => {
         try {
@@ -366,6 +401,14 @@ function createBot() {
         ]));
     });
     bot.command('today', adminOnly_1.adminOnly, async (ctx) => {
+        if ((0, expenseFlow_1.isInExpenseFlow)(ctx.from.id)) {
+            await (0, expenseFlow_1.handleExpenseText)(ctx, ctx.message.text);
+            return;
+        }
+        if ((0, revenueFlow_1.isInRevenueFlow)(ctx.from.id)) {
+            await (0, revenueFlow_1.handleRevenueText)(ctx, ctx.message.text);
+            return;
+        }
         try {
             const response = await (0, adminApi_1.getToday)();
             await ctx.reply(formatToday(response));
@@ -424,7 +467,15 @@ function createBot() {
         }
     });
     // ─── Text messages (wizard steps) ──────────────────────────────────────────
-    bot.on('text', adminOnlyForActiveCreateUserFlow, async (ctx) => {
+    bot.on('text', adminOnlyForActiveFlow, async (ctx) => {
+        if ((0, expenseFlow_1.isInExpenseFlow)(ctx.from.id)) {
+            await (0, expenseFlow_1.handleExpenseText)(ctx, ctx.message.text);
+            return;
+        }
+        if ((0, revenueFlow_1.isInRevenueFlow)(ctx.from.id)) {
+            await (0, revenueFlow_1.handleRevenueText)(ctx, ctx.message.text);
+            return;
+        }
         await (0, createUserFlow_1.handleText)(ctx, ctx.message.text);
     });
     // ─── Inline keyboard callbacks ──────────────────────────────────────────────
@@ -432,12 +483,20 @@ function createBot() {
         // Always acknowledge immediately to dismiss the loading spinner
         await ctx.answerCbQuery();
         return next();
-    }, adminOnlyForActiveCreateUserFlow, async (ctx) => {
+    }, adminOnlyForActiveFlow, async (ctx) => {
         if (!('data' in ctx.callbackQuery))
             return;
         const { data } = ctx.callbackQuery;
         if (!data)
             return;
+        if ((0, expenseFlow_1.isInExpenseFlow)(ctx.from.id)) {
+            await (0, expenseFlow_1.handleExpenseCallback)(ctx, data);
+            return;
+        }
+        if ((0, revenueFlow_1.isInRevenueFlow)(ctx.from.id)) {
+            await (0, revenueFlow_1.handleRevenueCallback)(ctx, data);
+            return;
+        }
         await (0, createUserFlow_1.handleCallback)(ctx, data);
     });
     // ─── Global error handler ───────────────────────────────────────────────────
